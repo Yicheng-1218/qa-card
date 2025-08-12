@@ -21,6 +21,21 @@
     }
   </script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    /* 簡易摺疊動畫（極簡 CSS）：外層 .collapsible 切換 .open 類 */
+    .collapsible .panel {
+      max-height: 0;
+      opacity: 0;
+      overflow: hidden;
+      transition: max-height 280ms ease, opacity 220ms ease;
+    }
+    .collapsible.open .panel {
+      max-height: 1000px; /* 足夠大即可，避免 JS 計算高度 */
+      opacity: 1;
+    }
+    .collapsible .chevron { transition: transform 200ms ease; }
+    .collapsible.open .chevron { transform: rotate(180deg); }
+  </style>
 </head>
 <body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
   <div class="min-h-screen">
@@ -42,7 +57,7 @@
       <section id="stats" class="mb-6 hidden">
         <div class="grid grid-cols-2 sm:grid-cols-6 gap-3">
           <div class="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500 dark:text-gray-400">總題數</div><div id="stat-total" class="text-xl font-semibold">0</div></div>
-          <div class="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500 dark:text-gray-400">已答</div><div id="stat-attempts" class="text-xl font-semibold">0</div></div>
+          <div class="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500 dark:text-gray-400">剩餘</div><div id="stat-attempts" class="text-xl font-semibold">0</div></div>
           <div class="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500 dark:text-gray-400">正確</div><div id="stat-correct" class="text-xl font-semibold text-green-600">0</div></div>
           <div class="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500 dark:text-gray-400">錯誤</div><div id="stat-wrong" class="text-xl font-semibold text-red-600">0</div></div>
           <div class="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500 dark:text-gray-400">正確率</div><div id="stat-accuracy" class="text-xl font-semibold">0%</div></div>
@@ -61,6 +76,12 @@
             </label>
             <button id="use-sample" class="px-4 py-2 rounded border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">載入範例</button>
           </div>
+          <div class="mt-4">
+            <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <input id="repeat-toggle" type="checkbox" class="h-4 w-4" />
+              <span>答錯的題目再次出現</span>
+            </label>
+          </div>
           <div class="mt-4 text-sm text-gray-600 dark:text-gray-300">
             例：
             <div class="mt-2 p-3 bg-gray-50 dark:bg-gray-900/50 rounded border border-gray-200 dark:border-gray-700 font-mono text-xs overflow-auto">
@@ -76,17 +97,23 @@
       </section>
 
       <section id="finished" class="hidden">
-        <div class="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-6 text-center">
-          <div class="text-2xl font-bold mb-2">恭喜，全部答對！</div>
-          <div class="text-gray-600 dark:text-gray-300 mb-4">你可以重置進度或重新匯入 CSV。</div>
-          <div class="flex gap-3 justify-center">
-            <button id="restart-btn" class="px-4 py-2 rounded bg-brand-600 text-white hover:bg-brand-700 transition-colors">重置進度</button>
-            <label class="px-4 py-2 rounded border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer">
-              <input id="csv-input-finished" type="file" accept=".csv" class="hidden" />
-              重新匯入 CSV
-            </label>
+        <div class="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-6">
+          <div class="text-center">
+            <div class="text-2xl font-bold mb-2">已全部作答完畢</div>
+            <div class="text-gray-600 dark:text-gray-300 mb-4">你可以重置進度或重新匯入 CSV。</div>
+            <div class="flex gap-3 justify-center">
+              <button id="restart-btn" class="px-4 py-2 rounded bg-brand-600 text-white hover:bg-brand-700 transition-colors">重置進度</button>
+              <label class="px-4 py-2 rounded border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer">
+                <input id="csv-input-finished" type="file" accept=".csv" class="hidden" />
+                重新匯入 CSV
+              </label>
+            </div>
           </div>
         </div>
+      </section>
+
+      <section id="wrong-list-section" class="hidden">
+        <div id="wrong-list" class="space-y-4 mt-4"></div>
       </section>
     </main>
   </div>
@@ -110,7 +137,9 @@
       state = {
         deck: [],
         stats: { totalUnique: 0, attempts: 0, correct: 0, wrong: 0 },
-        timer: { isRunning: false, startEpochMs: null, accumulatedMs: 0 }
+        timer: { isRunning: false, startEpochMs: null, accumulatedMs: 0 },
+        settings: { repeatIncorrect: false },
+        wrongByQuestionId: {}
       };
       clearTimerInterval();
       saveState();
@@ -132,6 +161,8 @@
         const parsed = JSON.parse(raw);
         if (!parsed || !Array.isArray(parsed.deck) || !parsed.stats) return false;
         if (!parsed.timer) parsed.timer = { isRunning: false, startEpochMs: null, accumulatedMs: 0 };
+        if (!parsed.settings) parsed.settings = { repeatIncorrect: false };
+        if (!parsed.wrongByQuestionId) parsed.wrongByQuestionId = {};
         state = parsed;
         return true;
       } catch (err) {
@@ -283,6 +314,7 @@
       const uploaderEl = document.getElementById('uploader');
       const quizEl = document.getElementById('quiz');
       const finishedEl = document.getElementById('finished');
+      const wrongListSectionEl = document.getElementById('wrong-list-section');
 
       const totalEl = document.getElementById('stat-total');
       const attemptsEl = document.getElementById('stat-attempts');
@@ -295,7 +327,7 @@
       if (state.stats.totalUnique > 0) {
         statsEl.classList.remove('hidden');
         totalEl.textContent = String(state.stats.totalUnique);
-        attemptsEl.textContent = String(state.stats.attempts);
+        attemptsEl.textContent = String(state.deck.length);
         correctEl.textContent = String(state.stats.correct);
         wrongEl.textContent = String(state.stats.wrong);
         const acc = state.stats.attempts > 0 ? Math.round((state.stats.correct / state.stats.attempts) * 100) : 0;
@@ -307,28 +339,40 @@
         clearTimerInterval();
       }
 
-      if (!hasDeck && state.stats.totalUnique > 0 && state.stats.correct >= state.stats.totalUnique) {
-        // 已全部答對，停止計時
-        if (state.timer.isRunning) {
-          stopTimerIfRunning();
-          saveState();
-          updateTimeUI();
+      if (!hasDeck && state.stats.totalUnique > 0) {
+        const requireAllCorrect = !!(state.settings && state.settings.repeatIncorrect);
+        const isDone = requireAllCorrect ? (state.stats.correct >= state.stats.totalUnique) : true;
+        if (isDone) {
+          if (state.timer.isRunning) {
+            stopTimerIfRunning();
+            saveState();
+            updateTimeUI();
+          }
+          uploaderEl.classList.add('hidden');
+          quizEl.classList.add('hidden');
+          finishedEl.classList.remove('hidden');
+          if (wrongListSectionEl) wrongListSectionEl.classList.remove('hidden');
+          renderWrongList();
+          return;
         }
-        uploaderEl.classList.add('hidden');
-        quizEl.classList.add('hidden');
-        finishedEl.classList.remove('hidden');
-        return;
       }
 
       if (hasDeck) {
         uploaderEl.classList.add('hidden');
         finishedEl.classList.add('hidden');
+        if (wrongListSectionEl) wrongListSectionEl.classList.add('hidden');
         quizEl.classList.remove('hidden');
         renderCurrentCard();
       } else {
         uploaderEl.classList.remove('hidden');
         quizEl.classList.add('hidden');
         finishedEl.classList.add('hidden');
+        if (wrongListSectionEl) wrongListSectionEl.classList.add('hidden');
+        // 同步開關顯示狀態
+        const repeatToggle = document.getElementById('repeat-toggle');
+        if (repeatToggle && state.settings) {
+          repeatToggle.checked = !!state.settings.repeatIncorrect;
+        }
       }
     }
 
@@ -395,7 +439,10 @@
 
       const current = state.deck.shift();
       if (!isCorrect) {
-        scheduleIncorrectQuestionBackToDeck(current);
+        recordWrongAttempt(q, selectedIdx);
+        if (state.settings && state.settings.repeatIncorrect) {
+          scheduleIncorrectQuestionBackToDeck(current);
+        }
       }
 
       saveState();
@@ -435,11 +482,77 @@
       });
     }
 
+    function recordWrongAttempt(question, selectedIdx) {
+      if (!state.wrongByQuestionId) state.wrongByQuestionId = {};
+      const chosenTexts = question.options
+        .map((o, i) => ({ o, i }))
+        .filter(({ i }) => selectedIdx.has(i))
+        .map(({ o }) => o.text);
+      const correctTexts = question.options.filter(o => o.isCorrect).map(o => o.text);
+      state.wrongByQuestionId[question.id] = {
+        questionId: question.id,
+        questionText: question.questionText,
+        chosenTexts,
+        correctTexts
+      };
+    }
+
+    function renderWrongList() {
+      const wrap = document.getElementById('wrong-list');
+      if (!wrap) return;
+      const entries = state.wrongByQuestionId ? Object.values(state.wrongByQuestionId) : [];
+      if (!entries.length) {
+        wrap.innerHTML = '<div class="text-sm text-gray-500 dark:text-gray-400 text-center">本次沒有錯題 🎉</div>';
+        return;
+      }
+      const sorted = entries.slice().sort((a, b) => {
+        const aid = typeof a.questionId === 'number' ? a.questionId : Number.MAX_SAFE_INTEGER;
+        const bid = typeof b.questionId === 'number' ? b.questionId : Number.MAX_SAFE_INTEGER;
+        if (aid !== bid) return aid - bid;
+        return String(a.questionText).localeCompare(String(b.questionText));
+      });
+      const html = `
+        <div class="mb-3 text-xl font-semibold text-center">錯題列表</div>
+        <div class="space-y-3">${sorted.map((it) => `
+          <div class="collapsible rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+            <button type="button" class="summary w-full px-4 py-3 flex items-center justify-between text-left">
+              <span class="font-medium">
+                <span class="text-brand-600 dark:text-brand-400 mr-2">題號 ${it.questionId ?? '-'}</span>
+                ${escapeHTML(it.questionText)}
+              </span>
+              <svg class="chevron ml-3 h-4 w-4 text-gray-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.08 1.04l-4.25 4.25a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+              </svg>
+            </button>
+            <div class="panel px-4">
+              <div class="text-sm mb-4">
+                <div class="mt-2"><span class="font-medium text-gray-700 dark:text-gray-200">你的答案：</span>${escapeHTML((it.chosenTexts || []).join('、') || '（未選擇）')}</div>
+                <div class="mt-1"><span class="font-medium text-gray-700 dark:text-gray-200">正確答案：</span>${escapeHTML((it.correctTexts || []).join('、'))}</div>
+              </div>
+            </div>
+          </div>
+        `).join('')}</div>
+      `;
+      wrap.innerHTML = html;
+      // 綁定極簡切換：點擊 summary 切換 .open 類，即可用 CSS 觸發動畫
+      wrap.querySelectorAll('.collapsible .summary').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const root = btn.closest('.collapsible');
+          if (!root) return;
+          root.classList.toggle('open');
+        });
+      });
+    }
+
     function startWithDeck(deck) {
+      const repeatToggleEl = document.getElementById('repeat-toggle');
+      const repeatSetting = repeatToggleEl ? !!repeatToggleEl.checked : false;
       state = {
         deck: deck.slice(),
         stats: { totalUnique: deck.length, attempts: 0, correct: 0, wrong: 0 },
-        timer: { isRunning: true, startEpochMs: Date.now(), accumulatedMs: 0 }
+        timer: { isRunning: true, startEpochMs: Date.now(), accumulatedMs: 0 },
+        settings: { repeatIncorrect: repeatSetting },
+        wrongByQuestionId: {}
       };
       ensureTimerTick();
       saveState();
@@ -484,6 +597,7 @@
       const restartBtn = document.getElementById('restart-btn');
       const sampleBtn = document.getElementById('use-sample');
       const themeBtn = document.getElementById('theme-toggle');
+      const repeatToggle = document.getElementById('repeat-toggle');
 
       const onPick = (e) => {
         const file = e.target.files && e.target.files[0];
@@ -523,6 +637,15 @@
         const isDark = document.documentElement.classList.contains('dark');
         applyTheme(isDark ? 'light' : 'dark');
       });
+
+      if (repeatToggle) {
+        repeatToggle.checked = false;
+        repeatToggle.addEventListener('change', (e) => {
+          if (!state.settings) state.settings = { repeatIncorrect: false };
+          state.settings.repeatIncorrect = !!e.target.checked;
+          saveState();
+        });
+      }
     }
 
     (function init() {
