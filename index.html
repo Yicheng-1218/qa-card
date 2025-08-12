@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>刷題網站</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd', 400: '#60a5fa', 500: '#3b82f6',
+              600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af', 900: '#1e3a8a'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+  <div class="min-h-screen">
+    <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
+      <div class="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
+        <h1 class="text-xl font-bold">刷題網站</h1>
+        <div class="flex items-center gap-3">
+          <button id="theme-toggle" class="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" aria-pressed="false">🌙 深色</button>
+          <button id="reset-progress" class="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">重置進度</button>
+          <label class="text-sm px-3 py-1.5 rounded bg-brand-600 text-white hover:bg-brand-700 cursor-pointer transition-colors">
+            <input id="csv-input" type="file" accept=".csv" class="hidden" />
+            匯入 CSV
+          </label>
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-3xl mx-auto px-4 py-6">
+      <section id="stats" class="mb-6 hidden">
+        <div class="grid grid-cols-2 sm:grid-cols-6 gap-3">
+          <div class="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500 dark:text-gray-400">總題數</div><div id="stat-total" class="text-xl font-semibold">0</div></div>
+          <div class="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500 dark:text-gray-400">已答</div><div id="stat-attempts" class="text-xl font-semibold">0</div></div>
+          <div class="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500 dark:text-gray-400">正確</div><div id="stat-correct" class="text-xl font-semibold text-green-600">0</div></div>
+          <div class="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500 dark:text-gray-400">錯誤</div><div id="stat-wrong" class="text-xl font-semibold text-red-600">0</div></div>
+          <div class="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500 dark:text-gray-400">正確率</div><div id="stat-accuracy" class="text-xl font-semibold">0%</div></div>
+          <div class="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500 dark:text-gray-400">總用時</div><div id="stat-time" class="text-xl font-semibold">00:00</div></div>
+        </div>
+      </section>
+
+      <section id="uploader" class="mb-6">
+        <div class="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-6">
+          <h2 class="font-semibold mb-3">上傳 CSV 開始練習</h2>
+          <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">格式：第一欄為題目，後續每欄為一個選項；正確選項以 <span class="font-mono">*</span> 前綴（可多個）。</p>
+          <div class="flex items-center gap-3">
+            <label class="px-4 py-2 rounded bg-brand-600 text-white hover:bg-brand-700 cursor-pointer transition-colors">
+              <input id="csv-input-hero" type="file" accept=".csv" class="hidden" />
+              選擇 CSV
+            </label>
+            <button id="use-sample" class="px-4 py-2 rounded border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">載入範例</button>
+          </div>
+          <div class="mt-4 text-sm text-gray-600 dark:text-gray-300">
+            例：
+            <div class="mt-2 p-3 bg-gray-50 dark:bg-gray-900/50 rounded border border-gray-200 dark:border-gray-700 font-mono text-xs overflow-auto">
+              Capital of France,*Paris,London,Berlin,Rome<br />
+              以下哪些是水果？,*Apple,*Banana,Carrot,Potato
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="quiz" class="hidden">
+        <div id="card" class="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-6"></div>
+      </section>
+
+      <section id="finished" class="hidden">
+        <div class="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-6 text-center">
+          <div class="text-2xl font-bold mb-2">恭喜，全部答對！</div>
+          <div class="text-gray-600 dark:text-gray-300 mb-4">你可以重置進度或重新匯入 CSV。</div>
+          <div class="flex gap-3 justify-center">
+            <button id="restart-btn" class="px-4 py-2 rounded bg-brand-600 text-white hover:bg-brand-700 transition-colors">重置進度</button>
+            <label class="px-4 py-2 rounded border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer">
+              <input id="csv-input-finished" type="file" accept=".csv" class="hidden" />
+              重新匯入 CSV
+            </label>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const SESSION_KEY = 'qaCardStateV1';
+    const THEME_KEY = 'qaCardTheme';
+    let timerIntervalId = null;
+
+    /**
+     * 格式：
+     * state = {
+     *   deck: [ { id, questionText, options: [{ text, isCorrect }], isMultiple } ],
+     *   stats: { totalUnique, attempts, correct, wrong },
+     *   timer: { isRunning, startEpochMs, accumulatedMs }
+     * }
+     */
+    let state = null;
+
+    function initializeEmpty() {
+      state = {
+        deck: [],
+        stats: { totalUnique: 0, attempts: 0, correct: 0, wrong: 0 },
+        timer: { isRunning: false, startEpochMs: null, accumulatedMs: 0 }
+      };
+      clearTimerInterval();
+      saveState();
+      render();
+    }
+
+    function saveState() {
+      try {
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(state));
+      } catch (err) {
+        console.error('Failed to save session', err);
+      }
+    }
+
+    function loadState() {
+      try {
+        const raw = sessionStorage.getItem(SESSION_KEY);
+        if (!raw) return false;
+        const parsed = JSON.parse(raw);
+        if (!parsed || !Array.isArray(parsed.deck) || !parsed.stats) return false;
+        if (!parsed.timer) parsed.timer = { isRunning: false, startEpochMs: null, accumulatedMs: 0 };
+        state = parsed;
+        return true;
+      } catch (err) {
+        console.warn('Failed to load session, start fresh.', err);
+        return false;
+      }
+    }
+
+    function clearState() {
+      try { sessionStorage.removeItem(SESSION_KEY); } catch {}
+    }
+
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    function parseCSVRowsToDeck(rows) {
+      const deck = [];
+      let idCounter = 1;
+
+      for (let idx = 0; idx < rows.length; idx += 1) {
+        const row = rows[idx];
+        if (!row) continue;
+        const cells = row.map(c => (c != null ? String(c).trim() : '')).filter(c => c !== '');
+        if (cells.length < 2) continue;
+
+        const firstCellLower = cells[0].toLowerCase();
+        if (idx === 0 && (firstCellLower === 'question' || firstCellLower === '題目')) {
+          continue;
+        }
+
+        const questionText = cells[0];
+        const rawOptions = cells.slice(1);
+        const options = [];
+        for (const raw of rawOptions) {
+          const trimmed = raw.trim();
+          const isCorrect = trimmed.startsWith('*');
+          const text = isCorrect ? trimmed.slice(1).trim() : trimmed;
+          if (text.length === 0) continue;
+          options.push({ text, isCorrect });
+        }
+        if (options.length < 2) continue;
+        const correctCount = options.filter(o => o.isCorrect).length;
+        if (correctCount === 0) continue;
+
+        shuffleArray(options);
+        deck.push({ id: idCounter++, questionText, options, isMultiple: correctCount > 1 });
+      }
+
+      shuffleArray(deck);
+      return deck;
+    }
+
+    function scheduleIncorrectQuestionBackToDeck(question) {
+      const minOffset = 2;
+      const maxOffset = 5;
+      const offset = Math.floor(Math.random() * (maxOffset - minOffset + 1)) + minOffset;
+      const insertIndex = Math.min(offset, state.deck.length);
+      state.deck.splice(insertIndex, 0, question);
+    }
+
+    function updateStatsAfterAnswer(isCorrect) {
+      state.stats.attempts += 1;
+      if (isCorrect) {
+        state.stats.correct += 1;
+      } else {
+        state.stats.wrong += 1;
+      }
+    }
+
+    function getTotalElapsedMs() {
+      if (!state || !state.timer) return 0;
+      const { isRunning, startEpochMs, accumulatedMs } = state.timer;
+      return accumulatedMs + (isRunning && startEpochMs ? (Date.now() - startEpochMs) : 0);
+    }
+
+    function formatDuration(ms) {
+      const totalSeconds = Math.floor(ms / 1000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+      const pad = (n) => String(n).padStart(2, '0');
+      return hours > 0 ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
+    }
+
+    function updateTimeUI() {
+      const timeEl = document.getElementById('stat-time');
+      if (!timeEl) return;
+      timeEl.textContent = formatDuration(getTotalElapsedMs());
+    }
+
+    function ensureTimerTick() {
+      clearTimerInterval();
+      if (state.timer && state.timer.isRunning) {
+        updateTimeUI();
+        timerIntervalId = setInterval(updateTimeUI, 1000);
+      }
+    }
+
+    function clearTimerInterval() {
+      if (timerIntervalId) {
+        clearInterval(timerIntervalId);
+        timerIntervalId = null;
+      }
+    }
+
+    function stopTimerIfRunning() {
+      if (!state.timer || !state.timer.isRunning) return;
+      const now = Date.now();
+      const delta = state.timer.startEpochMs ? (now - state.timer.startEpochMs) : 0;
+      state.timer.accumulatedMs += Math.max(0, delta);
+      state.timer.isRunning = false;
+      state.timer.startEpochMs = null;
+      clearTimerInterval();
+    }
+
+    function startTimerFresh() {
+      state.timer = { isRunning: true, startEpochMs: Date.now(), accumulatedMs: 0 };
+      ensureTimerTick();
+    }
+
+    function applyTheme(theme) {
+      const root = document.documentElement;
+      const isDark = theme === 'dark';
+      root.classList.toggle('dark', isDark);
+      try { localStorage.setItem(THEME_KEY, theme); } catch {}
+      const btn = document.getElementById('theme-toggle');
+      if (btn) {
+        btn.setAttribute('aria-pressed', String(isDark));
+        btn.textContent = isDark ? '☀️ 淺色' : '🌙 深色';
+      }
+    }
+
+    function initThemeFromStorage() {
+      let theme = 'light';
+      try {
+        const saved = localStorage.getItem(THEME_KEY);
+        if (saved === 'dark' || saved === 'light') theme = saved;
+      } catch {}
+      applyTheme(theme);
+    }
+
+    function render() {
+      const statsEl = document.getElementById('stats');
+      const uploaderEl = document.getElementById('uploader');
+      const quizEl = document.getElementById('quiz');
+      const finishedEl = document.getElementById('finished');
+
+      const totalEl = document.getElementById('stat-total');
+      const attemptsEl = document.getElementById('stat-attempts');
+      const correctEl = document.getElementById('stat-correct');
+      const wrongEl = document.getElementById('stat-wrong');
+      const accuracyEl = document.getElementById('stat-accuracy');
+
+      const hasDeck = state.deck && state.deck.length > 0;
+
+      if (state.stats.totalUnique > 0) {
+        statsEl.classList.remove('hidden');
+        totalEl.textContent = String(state.stats.totalUnique);
+        attemptsEl.textContent = String(state.stats.attempts);
+        correctEl.textContent = String(state.stats.correct);
+        wrongEl.textContent = String(state.stats.wrong);
+        const acc = state.stats.attempts > 0 ? Math.round((state.stats.correct / state.stats.attempts) * 100) : 0;
+        accuracyEl.textContent = `${acc}%`;
+        updateTimeUI();
+        if (state.timer.isRunning) ensureTimerTick(); else clearTimerInterval();
+      } else {
+        statsEl.classList.add('hidden');
+        clearTimerInterval();
+      }
+
+      if (!hasDeck && state.stats.totalUnique > 0 && state.stats.correct >= state.stats.totalUnique) {
+        // 已全部答對，停止計時
+        if (state.timer.isRunning) {
+          stopTimerIfRunning();
+          saveState();
+          updateTimeUI();
+        }
+        uploaderEl.classList.add('hidden');
+        quizEl.classList.add('hidden');
+        finishedEl.classList.remove('hidden');
+        return;
+      }
+
+      if (hasDeck) {
+        uploaderEl.classList.add('hidden');
+        finishedEl.classList.add('hidden');
+        quizEl.classList.remove('hidden');
+        renderCurrentCard();
+      } else {
+        uploaderEl.classList.remove('hidden');
+        quizEl.classList.add('hidden');
+        finishedEl.classList.add('hidden');
+      }
+    }
+
+    function renderCurrentCard() {
+      const cardEl = document.getElementById('card');
+      if (!state.deck.length) {
+        cardEl.innerHTML = '';
+        render();
+        return;
+      }
+      const q = state.deck[0];
+      const inputType = q.isMultiple ? 'checkbox' : 'radio';
+
+      const optionsHtml = q.options.map((opt, idx) => {
+        const inputId = `opt-${q.id}-${idx}`;
+        return `
+          <div class="option-item">
+            <input id="${inputId}" name="options" type="${inputType}" value="${idx}" class="peer hidden" />
+            <label for="${inputId}" class="block cursor-pointer rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-3 mb-2 transition-colors peer-checked:border-brand-600 dark:peer-checked:border-brand-400 peer-checked:bg-brand-50 dark:peer-checked:bg-brand-900/30 hover:border-brand-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900">${escapeHTML(opt.text)}</label>
+          </div>
+        `;
+      }).join('');
+
+      cardEl.innerHTML = `
+        <div class="mb-2 text-sm text-gray-500 dark:text-gray-400">${q.isMultiple ? '多選題' : '單選題'}</div>
+        <h3 class="text-lg font-semibold mb-4">${escapeHTML(q.questionText)}</h3>
+        <div id="options-wrap">${optionsHtml}</div>
+        <div class="mt-4 flex gap-3">
+          <button id="submit-btn" class="px-4 py-2 rounded bg-brand-600 text-white hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">提交答案</button>
+          <button id="skip-btn" class="px-4 py-2 rounded border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">略過此題</button>
+        </div>
+        <div id="feedback" class="mt-4"></div>
+      `;
+
+      document.getElementById('submit-btn').addEventListener('click', onSubmitAnswer);
+      document.getElementById('skip-btn').addEventListener('click', onSkipQuestion);
+    }
+
+    function onSkipQuestion() {
+      if (!state.deck.length) return;
+      const current = state.deck.shift();
+      scheduleIncorrectQuestionBackToDeck(current);
+      saveState();
+      render();
+    }
+
+    function onSubmitAnswer() {
+      if (!state.deck.length) return;
+      const submitBtn = document.getElementById('submit-btn');
+      const skipBtn = document.getElementById('skip-btn');
+      if (submitBtn) submitBtn.disabled = true;
+      if (skipBtn) skipBtn.disabled = true;
+      const q = state.deck[0];
+      const inputType = q.isMultiple ? 'checkbox' : 'radio';
+      const selectedNodes = Array.from(document.querySelectorAll(`#card input[type="${inputType}"][name="options"]:checked`));
+      const selectedIdx = new Set(selectedNodes.map(n => Number(n.value)));
+
+      const correctIdx = new Set(q.options.map((o, i) => o.isCorrect ? i : -1).filter(i => i >= 0));
+      const isCorrect = setsEqual(selectedIdx, correctIdx);
+
+      updateStatsAfterAnswer(isCorrect);
+
+      revealAnswerFeedback(q, selectedIdx, isCorrect);
+
+      const current = state.deck.shift();
+      if (!isCorrect) {
+        scheduleIncorrectQuestionBackToDeck(current);
+      }
+
+      saveState();
+    }
+
+    function setsEqual(a, b) {
+      if (a.size !== b.size) return false;
+      for (const v of a) if (!b.has(v)) return false;
+      return true;
+    }
+
+    function revealAnswerFeedback(question, selectedIdx, isCorrect) {
+      const inputs = Array.from(document.querySelectorAll('#card input'));
+      inputs.forEach(i => i.disabled = true);
+
+      const labels = Array.from(document.querySelectorAll('#card label'));
+      labels.forEach((label, idx) => {
+        const opt = question.options[idx];
+        const chosen = selectedIdx.has(idx);
+        if (opt.isCorrect) {
+          label.classList.add('border-green-600', 'bg-green-50', 'dark:border-green-400', 'dark:bg-green-900/30');
+        }
+        if (chosen && !opt.isCorrect) {
+          label.classList.add('border-red-600', 'bg-red-50', 'dark:border-red-400', 'dark:bg-red-900/30');
+        }
+      });
+
+      const feedbackEl = document.getElementById('feedback');
+      const correctTexts = question.options.filter(o => o.isCorrect).map(o => o.text);
+      feedbackEl.innerHTML = `
+        <div class="${isCorrect ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'} font-semibold mb-2">${isCorrect ? '答對！' : '答錯。'}</div>
+        ${isCorrect ? '' : `<div class="text-sm text-gray-700 dark:text-gray-300">正確答案：${escapeHTML(correctTexts.join('、'))}</div>`}
+        <button id="next-btn" class="mt-4 px-4 py-2 rounded border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">下一題</button>
+      `;
+      document.getElementById('next-btn').addEventListener('click', () => {
+        render();
+      });
+    }
+
+    function startWithDeck(deck) {
+      state = {
+        deck: deck.slice(),
+        stats: { totalUnique: deck.length, attempts: 0, correct: 0, wrong: 0 },
+        timer: { isRunning: true, startEpochMs: Date.now(), accumulatedMs: 0 }
+      };
+      ensureTimerTick();
+      saveState();
+      render();
+    }
+
+    function handleCSVFile(file) {
+      if (!file) return;
+      Papa.parse(file, {
+        complete: (results) => {
+          try {
+            const rows = results.data || [];
+            const deck = parseCSVRowsToDeck(rows);
+            if (!deck.length) {
+              alert('CSV 無有效題目，請確認格式。');
+              return;
+            }
+            startWithDeck(deck);
+          } catch (err) {
+            console.error(err);
+            alert('解析 CSV 發生錯誤，請檢查檔案格式。');
+          }
+        },
+        error: (error) => {
+          console.error(error);
+          alert('無法讀取 CSV 檔案。');
+        },
+        skipEmptyLines: 'greedy',
+        dynamicTyping: false
+      });
+    }
+
+    function escapeHTML(str) {
+      return str.replace(/[&<>\"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[ch]));
+    }
+
+    function wireEvents() {
+      const inputHeader = document.getElementById('csv-input');
+      const inputHero = document.getElementById('csv-input-hero');
+      const inputFinished = document.getElementById('csv-input-finished');
+      const resetBtn = document.getElementById('reset-progress');
+      const restartBtn = document.getElementById('restart-btn');
+      const sampleBtn = document.getElementById('use-sample');
+      const themeBtn = document.getElementById('theme-toggle');
+
+      const onPick = (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        clearState();
+        handleCSVFile(file);
+        e.target.value = '';
+      };
+
+      if (inputHeader) inputHeader.addEventListener('change', onPick);
+      if (inputHero) inputHero.addEventListener('change', onPick);
+      if (inputFinished) inputFinished.addEventListener('change', onPick);
+
+      if (resetBtn) resetBtn.addEventListener('click', () => {
+        if (confirm('確定清除當前進度？')) {
+          clearState();
+          initializeEmpty();
+        }
+      });
+      if (restartBtn) restartBtn.addEventListener('click', () => {
+        clearState();
+        initializeEmpty();
+      });
+
+      if (sampleBtn) sampleBtn.addEventListener('click', () => {
+        const csv = [
+          'Capital of France,*Paris,London,Berlin,Rome',
+          '以下哪些是水果？,*Apple,*Banana,Carrot,Potato',
+          '2+2 = ?,*4,2,3,5',
+          '下列哪些是偶數？,*2,*4,3,5'
+        ].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        handleCSVFile(blob);
+      });
+
+      if (themeBtn) themeBtn.addEventListener('click', () => {
+        const isDark = document.documentElement.classList.contains('dark');
+        applyTheme(isDark ? 'light' : 'dark');
+      });
+    }
+
+    (function init() {
+      initThemeFromStorage();
+      wireEvents();
+      if (!loadState()) {
+        initializeEmpty();
+      } else {
+        if (state.timer && state.timer.isRunning) ensureTimerTick();
+        render();
+      }
+    })();
+  </script>
+</body>
+</html> 
