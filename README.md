@@ -18,6 +18,7 @@
 - 正確選項需以 `*` 作為前綴（可多個）。
 - 第一列若為表頭且首欄為 `question` 或 `題目` 會自動略過。
 - 每題至少需要 2 個選項，且至少 1 個正確答案。
+- 若題目有包含 "," 請用雙引號括起，或是所有選項全部都用 "" 括起。
 
 範例：
 ```csv
@@ -25,6 +26,7 @@ Capital of France,*Paris,London,Berlin,Rome
 以下哪些是水果？,*Apple,*Banana,Carrot,Potato
 2+2 = ?,*4,2,3,5
 下列哪些是偶數？,*2,*4,3,5
+"Paris is the capital of France, but which city is the capital of Germany?", Rome , *Berlin , Madrid
 ```
 
 
